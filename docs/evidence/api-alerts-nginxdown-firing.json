@@ -1,0 +1,22 @@
+﻿{
+    "status":  "success",
+    "data":  {
+                 "alerts":  [
+                                {
+                                    "labels":  {
+                                                   "alertname":  "NginxDown",
+                                                   "instance":  "nginxexporter:9113",
+                                                   "job":  "nginx",
+                                                   "severity":  "critical"
+                                               },
+                                    "annotations":  {
+                                                        "description":  "nginx_up=0 å·²è¶\u0085è¿ 1 åéï¼Nginx è¿ç¨æ stub_status ç«¯ç¹å¼å¸¸ï¼ä¸å¡ç«ç¹å¯è½å·²ä¸­æ­ã",
+                                                        "summary":  "Nginx ä¸å¡æå¡ä¸å¯ç¨"
+                                                    },
+                                    "state":  "firing",
+                                    "activeAt":  "2026-09-25T10:59:00.661682529Z",
+                                    "value":  "0e+00"
+                                }
+                            ]
+             }
+}

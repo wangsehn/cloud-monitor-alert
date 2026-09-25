@@ -1,0 +1,34 @@
+﻿{
+    "annotations":  {
+                        "description":  "nginx_up=0 å·²è¶\u0085è¿ 1 åéï¼Nginx è¿ç¨æ stub_status ç«¯ç¹å¼å¸¸ï¼ä¸å¡ç«ç¹å¯è½å·²ä¸­æ­ã",
+                        "summary":  "Nginx ä¸å¡æå¡ä¸å¯ç¨"
+                    },
+    "endsAt":  "2026-09-25T11:04:00.661Z",
+    "fingerprint":  "947408081943292d",
+    "receivers":  [
+                      {
+                          "name":  "default"
+                      }
+                  ],
+    "startsAt":  "2026-09-25T11:00:00.661Z",
+    "status":  {
+                   "inhibitedBy":  [
+
+                                   ],
+                   "mutedBy":  [
+
+                               ],
+                   "silencedBy":  [
+
+                                  ],
+                   "state":  "active"
+               },
+    "updatedAt":  "2026-09-25T11:00:15.657Z",
+    "generatorURL":  "http://9487c0a5e168:9090/graph?g0.expr=nginx_up%7Bjob%3D%22nginx%22%7D+%3D%3D+0\u0026g0.tab=1",
+    "labels":  {
+                   "alertname":  "NginxDown",
+                   "instance":  "nginxexporter:9113",
+                   "job":  "nginx",
+                   "severity":  "critical"
+               }
+}

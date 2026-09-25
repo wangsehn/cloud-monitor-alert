@@ -1,0 +1,36 @@
+﻿{
+    "status":  "success",
+    "data":  {
+                 "alerts":  [
+                                {
+                                    "labels":  {
+                                                   "alertname":  "TargetDown",
+                                                   "instance":  "nginxexporter:9113",
+                                                   "job":  "nginx",
+                                                   "severity":  "critical"
+                                               },
+                                    "annotations":  {
+                                                        "description":  "nginxexporter:9113ï¼nginxï¼å·²è¶\u0085è¿ 1 åéæ æ³ééï¼è¯·æ£æ¥æå¡æ¯å¦å­æ´»ã",
+                                                        "summary":  "çæ§ç®æ å¤±è - nginx"
+                                                    },
+                                    "state":  "firing",
+                                    "activeAt":  "2026-09-25T11:06:30.007023203Z",
+                                    "value":  "0e+00"
+                                },
+                                {
+                                    "labels":  {
+                                                   "alertname":  "NginxMetricsMissing",
+                                                   "job":  "nginx",
+                                                   "severity":  "warning"
+                                               },
+                                    "annotations":  {
+                                                        "description":  "nginx_up ææ å·² 2 åéæ æ°æ®ï¼Nginx å¯¼åºå¨å¯è½å·²åæ­¢ï¼è¯·æ£æ¥ééé¾è·¯æ¬èº«ã",
+                                                        "summary":  "Nginx çæ§ææ ç¼ºå¤±"
+                                                    },
+                                    "state":  "firing",
+                                    "activeAt":  "2026-09-25T11:06:30.661682529Z",
+                                    "value":  "1e+00"
+                                }
+                            ]
+             }
+}
