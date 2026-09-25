@@ -76,3 +76,15 @@ groups:
         annotations:
           summary: "Nginx 业务服务不可用"
           description: "nginx_up=0 已超过 1 分钟，Nginx 进程或 stub_status 端点异常，业务站点可能已中断。"
+
+      # 指标缺失兜底：exporter 进程挂掉时 nginx_up 序列会整体消失，
+      # "nginx_up == 0" 对不存在的序列不匹配，NginxDown 不会触发——
+      # 这是告警体系的盲区，用 absent() 覆盖：只要指标断流就告警
+      - alert: NginxMetricsMissing
+        expr: absent(nginx_up{job="nginx"})
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Nginx 监控指标缺失"
+          description: "nginx_up 指标已 2 分钟无数据，Nginx 导出器可能已停止，请检查采集链路本身。"

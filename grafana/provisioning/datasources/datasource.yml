@@ -5,6 +5,8 @@ apiVersion: 1
 datasources:
   - name: Prometheus
     type: prometheus
+    # 显式 uid：dashboard JSON 通过该 uid 引用数据源，保证任何环境加载结果一致
+    uid: prometheus
     access: proxy
     url: http://prometheus:9090
     isDefault: true

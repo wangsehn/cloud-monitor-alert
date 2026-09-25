@@ -51,6 +51,10 @@ services:
       - GF_SECURITY_ADMIN_USER=${GF_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
+      # 实验环境开启匿名只读访问，便于免登录查看面板；
+      # 面板为只读（editable=false），生产环境请删除下面两行
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
       - grafana-data:/var/lib/grafana
       # 自动创建 Prometheus 数据源，无需在页面手动添加

@@ -1,0 +1,15 @@
+# Grafana Dashboard 自动加载配置：
+# 启动时扫描本目录下的 *.json 面板文件并自动导入，无需手工导入模板。
+apiVersion: 1
+
+providers:
+  - name: 'cloud-monitor'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false
