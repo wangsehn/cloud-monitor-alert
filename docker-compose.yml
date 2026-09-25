@@ -1,0 +1,121 @@
+# ============================================================
+# 云主机监控告警实验环境
+# 组件: Prometheus / Grafana / Alertmanager / Node Exporter / Nginx(+exporter)
+# 用法: cp .env.example .env && docker compose up -d
+# 说明: 结构参考 durrello/prometheus-grafana-docker (MIT)，在此基础上做了修改：
+#       1) node-exporter 增加宿主机文件系统挂载（见下方注释）
+#       2) 增加 Grafana 数据源自动 provisioning（grafana/provisioning/）
+#       3) 增加 --web.enable-lifecycle，支持不重启热加载告警规则
+# ============================================================
+
+services:
+  # ---------- 时序数据库 + 告警规则评估 ----------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      # 开启 lifecycle API 后，修改规则文件可热重载:
+      #   curl -X POST http://localhost:9090/-/reload
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    networks:
+      - monitor-net
+    restart: unless-stopped
+
+  # ---------- 告警接收/分组/抑制 ----------
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+    ports:
+      - "9093:9093"
+    networks:
+      - monitor-net
+    restart: unless-stopped
+
+  # ---------- 可视化面板 ----------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GF_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      # 自动创建 Prometheus 数据源，无需在页面手动添加
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - monitor-net
+    restart: unless-stopped
+
+  # ---------- 主机指标采集（CPU/内存/磁盘/网络） ----------
+  # 修改点: 原仓库未挂载宿主机 / 、/proc、/sys，导致磁盘等指标采集不到真实宿主机数据。
+  # 挂载后 node-exporter 通过 --path.rootfs=/host 读取宿主机文件系统。
+  # 注意: 在 Windows Docker Desktop 下这里读到的是 Docker 虚拟机(WSL2)的指标，
+  #       部署到 Linux 服务器时才是真正的宿主机指标。
+  nodeexporter:
+    image: prom/node-exporter:latest
+    container_name: nodeexporter
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/host'
+    volumes:
+      - '/:/host:ro'
+      - '/proc:/host/proc:ro'
+      - '/sys:/host/sys:ro'
+    ports:
+      - "9100:9100"
+    networks:
+      - monitor-net
+    restart: unless-stopped
+
+  # ---------- 模拟"业务服务"：一个 Nginx 静态站点 ----------
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./html-app:/usr/share/nginx/html:ro
+    ports:
+      # 宿主机端口可通过 .env 的 NGINX_PORT 覆盖（默认 8080）
+      - "${NGINX_PORT:-8080}:80"
+    networks:
+      - monitor-net
+    restart: unless-stopped
+
+  # ---------- Nginx 指标导出器（连接数/请求量） ----------
+  nginxexporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: nginxexporter
+    ports:
+      - "9113:9113"
+    command: '--nginx.scrape-uri=http://nginx:80/stub_status'
+    depends_on:
+      - nginx
+    networks:
+      - monitor-net
+    restart: unless-stopped
+
+volumes:
+  grafana-data:
+  prometheus-data:
+
+networks:
+  monitor-net:
+    driver: bridge

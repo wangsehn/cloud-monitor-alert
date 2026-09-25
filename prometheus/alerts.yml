@@ -1,0 +1,78 @@
+# ============================================================
+# 告警规则（相对原仓库的修改）:
+#   1. 注释与描述改为中文，便于演示与讲解
+#   2. for 时长从 5m 缩短为 2m，方便实验时快速触发并截图
+#   3. 新增 nginx_alerts 分组：业务层自定义告警
+# 阈值说明：以下是实验环境的演示值，生产环境应结合容量基线重新设定
+# ============================================================
+groups:
+  # ---------- 主机资源告警 ----------
+  - name: node_alerts
+    rules:
+      # CPU 使用率: 所有核平均非空闲占比 > 80% 持续 2 分钟
+      - alert: HighCPUUsage
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU 使用率过高 - {{ $labels.instance }}"
+          description: "CPU 使用率超过 80%（当前约 {{ $value | printf \"%.1f\" }}%），已持续 2 分钟。"
+
+      # 内存使用率: 可用内存低于总量的 15% 持续 2 分钟
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 < 15
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "内存可用率过低 - {{ $labels.instance }}"
+          description: "可用内存低于 15%（当前约 {{ $value | printf \"%.1f\" }}%）。"
+
+      # 磁盘使用率: 根分区剩余空间低于 20% 持续 5 分钟
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "磁盘空间不足 - {{ $labels.instance }}"
+          description: "根分区剩余空间低于 20%（当前约 {{ $value | printf \"%.1f\" }}%）。"
+
+  # ---------- 可用性告警 ----------
+  - name: availability_alerts
+    rules:
+      # 任一抓取目标失联超过 1 分钟（如进程被停止、容器退出）
+      - alert: TargetDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "监控目标失联 - {{ $labels.job }}"
+          description: "{{ $labels.instance }}（{{ $labels.job }}）已超过 1 分钟无法采集，请检查服务是否存活。"
+
+  # ---------- 业务告警（自定义新增） ----------
+  - name: nginx_alerts
+    rules:
+      # Nginx 活跃连接数突增，可能是流量异常或被刷
+      - alert: NginxHighActiveConnections
+        expr: nginx_connections_active{job="nginx"} > 500
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Nginx 活跃连接数过高"
+          description: "活跃连接数超过 500（当前 {{ $value | printf \"%.0f\" }}），请确认是否存在异常流量。"
+
+      # Nginx 业务不可用：用 nginx_up 而不是 up 判断——
+      # up 只代表采集链路存活（exporter 进程活着），nginx 进程挂掉时 up 仍为 1，
+      # 必须看 exporter 暴露的 nginx_up（它探测的是真正的 Nginx stub_status）
+      - alert: NginxDown
+        expr: nginx_up{job="nginx"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Nginx 业务服务不可用"
+          description: "nginx_up=0 已超过 1 分钟，Nginx 进程或 stub_status 端点异常，业务站点可能已中断。"

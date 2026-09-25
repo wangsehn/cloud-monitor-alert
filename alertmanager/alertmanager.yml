@@ -1,0 +1,33 @@
+# ============================================================
+# Alertmanager 配置：路由 / 分组 / 抑制
+# 说明: 默认接收器为本地空操作（仅用于实验演示），
+#       实际通知可接入邮件、Slack、企业微信、Server酱等。
+# 验证方式: 告警触发后打开 http://localhost:9093 查看 firing 状态
+# ============================================================
+global:
+  # 告警恢复后，最长 5 分钟内向接收方发送 resolved 通知
+  resolve_timeout: 5m
+
+# 所有告警走 default 路由
+route:
+  receiver: 'default'
+  # 按 告警名+实例 分组，避免同一实例的告警刷屏
+  group_by: ['alertname', 'instance']
+  group_wait: 30s        # 首条通知前等待 30s，攒齐同组告警
+  group_interval: 5m     # 同组新告警的通知间隔
+  repeat_interval: 4h    # 未恢复的告警重复通知间隔
+
+receivers:
+  - name: 'default'
+    # 本地演示用空接收器。接入真实通知的示例（Slack，注释状态）:
+    # slack_configs:
+    #   - api_url: 'https://hooks.slack.com/services/XXX/YYY/ZZZ'
+    #     channel: '#alerts'
+    #     send_resolved: true
+
+# 抑制规则: 同一实例出现 critical 告警时，屏蔽其 warning 告警
+# 例: NginxDown(critical) 触发期间，不再重复提示 TargetDown 相关的 warning
+inhibit_rules:
+  - source_matchers: [severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: ['instance']

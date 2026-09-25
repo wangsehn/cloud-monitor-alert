@@ -1,0 +1,39 @@
+# ============================================================
+# Prometheus 主配置：抓取周期 / 告警规则 / 告警接收方 / 抓取目标
+# ============================================================
+global:
+  # 每 15 秒抓取一次指标，并每 15 秒评估一次告警规则
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# 加载告警规则文件
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+# 告警触发后发送给 Alertmanager
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+# 抓取目标列表（容器之间用服务名互相访问）
+scrape_configs:
+  # Prometheus 自身状态
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['prometheus:9090']
+
+  # 主机指标（CPU/内存/磁盘/网络）
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets: ['nodeexporter:9100']
+
+  # Nginx 业务指标（连接数/请求量，来自 nginxexporter）
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginxexporter:9113']
+
+  # Alertmanager 自身状态
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
