@@ -1,6 +1,6 @@
 # Linux 云主机监控与告警系统（运维实验项目）
 
-基于 Prometheus + Grafana + Alertmanager 的云主机监控告警实验环境：采集 CPU、内存、磁盘等主机指标与 Nginx 业务指标，配置告警规则，并通过模拟服务中断完成一次完整的「告警触发 → 通知 → 恢复」故障处理演练。
+基于 Prometheus + Grafana + Alertmanager 的云主机监控告警实验环境：采集 CPU、内存、磁盘等主机指标与 Nginx 业务指标，配置告警规则，并通过模拟服务中断完成一次完整的「告警触发 → Alertmanager 接收确认 → 告警恢复」故障处理演练（Alertmanager 当前为本地空操作接收器，未接入邮件等外部通知渠道）。
 
 > 对应岗位：云资源日常维护 / 日常监控 / 告警处理 / 故障处理 / 运行质量分析
 
@@ -21,14 +21,14 @@
                                             浏览器访问面板/告警页
 ```
 
-| 服务 | 端口 | 说明 |
+| 服务 | 地址 | 说明 |
 | --- | --- | --- |
 | Grafana | <http://localhost:3000> | 可视化面板（账号见 `.env`） |
 | Prometheus | <http://localhost:9090> | 指标采集与告警规则评估 |
 | Alertmanager | <http://localhost:9093> | 告警接收、分组、抑制 |
-| Node Exporter | <http://localhost:9100> | 主机 CPU/内存/磁盘指标 |
 | Nginx 演示站点 | <http://localhost:8080> | 被监控的模拟业务服务（宿主机端口可用 `.env` 中 `NGINX_PORT` 修改） |
-| nginx-exporter | <http://localhost:9113> | Nginx 连接数/请求量指标 |
+| Node Exporter | 容器网络内部 :9100 | 主机 CPU/内存/磁盘指标，仅供 Prometheus 抓取，不映射宿主机端口 |
+| nginx-exporter | 容器网络内部 :9113 | Nginx 连接数/请求量指标，仅供 Prometheus 抓取，不映射宿主机端口 |
 
 ## 目录结构
 
@@ -61,6 +61,14 @@ docker compose ps         # 六个容器应为 running
 ```
 
 国内镜像拉取慢时，可在 Docker 配置中添加镜像加速地址后重试。
+
+### 安全默认配置（本地演示）
+
+- 所有页面端口仅绑定 `127.0.0.1`，局域网其他机器无法访问；需要局域网演示时去掉 compose 端口映射中的 `127.0.0.1:` 前缀（务必同时设置强管理密码）
+- node-exporter 与 nginx-exporter 不映射宿主机端口，Prometheus 通过容器网络抓取
+- Grafana 匿名访问默认关闭（未登录访问 API 返回 401）；本地想免登录看面板或截图时，在 `.env` 中设 `GF_ANONYMOUS=true`（只读 Viewer 角色）
+- Grafana 管理口令通过 `.env` 的 `GF_ADMIN_PASSWORD` 设置；不创建 `.env` 时为 admin/admin，仅限本机演示使用
+- 镜像全部固定具体版本（Prometheus v3.15.0 / Grafana 13.2.2 / Alertmanager v0.34.1 / Node Exporter v1.12.1 / Nginx 1.29.8 / nginx-prometheus-exporter 1.5.0），避免 latest 拉到不兼容的新版本
 
 ### 第一步：确认指标采集正常
 
@@ -182,10 +190,12 @@ docker compose start nginx
 6. **开启 `--web.enable-lifecycle`**：修改规则文件后可热重载，不用重启容器
 7. **Nginx 宿主机端口可配置**（`NGINX_PORT`，默认 8080），避免与宿主机上已有服务冲突
 8. **告警注释中文化**、`for` 时长按实验场景调优，并标注了生产环境应如何取值
+9. **安全默认配置**：页面端口仅绑定 `127.0.0.1`、两个 exporter 不映射宿主机端口、Grafana 匿名访问默认关闭（`GF_ANONYMOUS` 可开）、管理口令经 `.env` 注入
+10. **镜像版本固定**：六个组件全部固定具体版本，避免 latest 意外升级引入不兼容变更
 
 ## 常见问题
 
-- **端口冲突**：确认宿主机 3000/8080/9090/9093/9100/9113 未被占用，或修改 compose 端口映射（Nginx 端口可用 `.env` 的 `NGINX_PORT`）
+- **端口冲突**：确认宿主机 3000/8080/9090/9093 未被占用，或修改 compose 端口映射（Nginx 端口可用 `.env` 的 `NGINX_PORT`）
 - **磁盘指标看不到真实数据**：Docker Desktop（Windows/macOS）下 node-exporter 采集的是虚拟机指标，属预期现象；部署到 Linux 云主机即为真实数据
 - **告警一直 inactive**：阈值未达到属正常；想快速看到效果可临时调低阈值、缩短 `for` 时长后热重载
 - **Grafana 启动后不断重启（Datasource provisioning error）**：旧版本 grafana-data 卷中残留的自动 uid 数据源与新的 `uid: prometheus` 冲突；执行 `docker compose down -v` 清空演示数据卷后重新 `up -d` 即可（会丢失历史指标，实验环境无影响）
