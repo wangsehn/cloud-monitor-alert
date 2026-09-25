@@ -69,6 +69,7 @@ docker compose ps         # 六个容器应为 running
 - Grafana 匿名访问默认关闭（未登录访问 API 返回 401）；本地想免登录看面板或截图时，在 `.env` 中设 `GF_ANONYMOUS=true`（只读 Viewer 角色）
 - Grafana 管理口令通过 `.env` 的 `GF_ADMIN_PASSWORD` 设置；不创建 `.env` 时为 admin/admin，仅限本机演示使用
 - 镜像全部固定具体版本（Prometheus v3.15.0 / Grafana 13.2.2 / Alertmanager v0.34.1 / Node Exporter v1.12.1 / Nginx 1.29.8 / nginx-prometheus-exporter 1.5.0），避免 latest 拉到不兼容的新版本
+- **部署到公网/云服务器前必做**：设置强管理密码（不依赖 admin/admin 回退值）、恢复端口绑定检查（仅开放必要端口并配合防火墙/安全组）、为 Alertmanager 接入真实通知渠道
 
 ### 第一步：确认指标采集正常
 
