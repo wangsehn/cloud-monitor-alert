@@ -36,14 +36,18 @@
 cloud-monitor-alert/
 ├── docker-compose.yml          # 六个容器的编排定义
 ├── .env.example                # Grafana 口令模板（复制为 .env 使用）
+├── LICENSE                     # MIT（含原作者版权与本项目修改声明）
 ├── prometheus/
 │   ├── prometheus.yml          # 抓取周期/告警规则/目标列表
-│   └── alerts.yml              # 告警规则（CPU/内存/磁盘/目标失联/Nginx）
+│   └── alerts.yml              # 告警规则（CPU/内存/磁盘/目标失联/Nginx/指标缺失）
 ├── alertmanager/
 │   └── alertmanager.yml        # 告警路由/分组/抑制规则
-├── grafana/provisioning/       # 数据源自动注册（免手工添加）
+├── grafana/provisioning/
+│   ├── datasources/            # Prometheus 数据源自动注册
+│   └── dashboards/             # 监控面板自动加载（免手工导入）
 ├── nginx/nginx.conf            # 演示站点配置（含 stub_status 指标端点）
-└── html-app/index.html         # 演示站点页面
+├── html-app/index.html         # 演示站点页面
+└── docs/evidence/              # 实际运行截图与告警 API 证据（本机实测采集）
 ```
 
 ## 快速开始
@@ -78,12 +82,17 @@ node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpo
 nginx_connections_active{job="nginx"}
 ```
 
-### 第二步：Grafana 出图
+### 第二步：Grafana 自动出图（免手工导入）
 
-1. 登录 <http://localhost:3000>（账号密码在 `.env`）
-2. 数据源 `Prometheus` 已通过 provisioning 自动创建，无需手工添加
-3. 左侧菜单 → Dashboards → Import → 输入官方模板 ID **1860**（Node Exporter Full）→ 选择 Prometheus 数据源 → Import
-4. 即可看到 CPU、内存、磁盘、网络的完整主机面板，截图保存
+`grafana/provisioning/` 已同时配置数据源自动注册与 **Dashboard 自动加载**：
+
+1. 打开 <http://localhost:3000>，无需手工添加数据源或导入面板
+2. 首页即可看到自动加载的「云主机监控面板」，包含 8 个面板：
+   CPU 使用率、内存使用率、磁盘使用率（各分区）、网络流量、
+   Nginx 活跃连接数、Nginx 请求速率、采集目标在线数、Nginx 业务状态
+3. Nginx 业务状态面板会随服务启停实时切换「运行中 / 已停止」
+
+如需更详细的主机指标，可另行导入官方模板 1860（Node Exporter Full），本项目的自定义面板已覆盖日常巡检所需的核心指标。
 
 ## 告警规则说明
 
@@ -97,6 +106,7 @@ nginx_connections_active{job="nginx"}
 | TargetDown | 任一抓取目标失联 > 1 分钟（`up == 0`） | critical |
 | NginxHighActiveConnections | Nginx 活跃连接 > 500 持续 1 分钟 | warning |
 | NginxDown | Nginx 业务不可用（`nginx_up == 0`）持续 1 分钟 | critical |
+| NginxMetricsMissing | `nginx_up` 指标断流 > 2 分钟（`absent()`） | warning |
 
 > **实测踩坑记录（面试可讲）**：`up` 只代表"采集链路"存活。只停掉 Nginx 进程、保留 exporter 时，`up{job="nginx"}` 仍然是 1——此时必须看 exporter 探测真实业务后暴露的 `nginx_up` 指标。所以 TargetDown 用 `up` 判断（抓取目标失联），NginxDown 用 `nginx_up` 判断（业务进程不可用），两者互补。
 
@@ -135,23 +145,56 @@ docker compose start nginx
 
 完整跑一遍并保留：**Grafana 面板截图、firing 告警截图、resolved 恢复截图**。
 
+## 实际运行证据
+
+`docs/evidence/` 保存了本机（Windows 11 + Docker Desktop + WSL2）完整实测的材料，全部来自真实运行，非手工绘制：
+
+| 文件 | 内容 |
+| --- | --- |
+| `prometheus-targets-all-up.png` | 四个抓取目标全部 UP |
+| `grafana-dashboard-all-normal.png` | 自动加载的 8 面板监控面板（Nginx 运行中） |
+| `prometheus-alerts-nginxdown-firing.png` | 场景1：停止 Nginx 后 NginxDown 进入 FIRING |
+| `alertmanager-nginxdown-active.png` | 场景1：Alertmanager 收到告警（active） |
+| `api-alerts-nginxdown-firing.json` / `api-alertmanager-nginxdown.json` | 告警 API 原始返回 |
+| `prometheus-alerts-resolved.png` | 恢复 Nginx 后告警全部解除 |
+| `prometheus-targets-nginxexporter-down.png` | 场景2：停止导出器后 nginx 目标 DOWN |
+| `prometheus-alerts-targetdown-metricsmissing.png` | 场景2：TargetDown 与 NginxMetricsMissing 同时 FIRING |
+| `api-alerts-targetdown-firing.json` | 场景2 告警 API 原始返回 |
+| `grafana-dashboard-nginx-stopped.png` | 故障期间面板（Nginx 指标断流） |
+
+三场景实测结论：
+
+1. **停止 Nginx 业务容器** → `nginx_up=0` → NginxDown 约 1 分钟后 pending → firing，Alertmanager 同步接收；此时 `up{job="nginx"}` 仍为 1，TargetDown 不触发（符合设计）
+2. **停止 Nginx Exporter** → `up=0` 触发 TargetDown；同时 `nginx_up` 序列消失，验证了 `nginx_up == 0` 对缺失指标不生效的盲区，`absent(nginx_up)` 触发 NginxMetricsMissing 补位
+3. **恢复服务** → 两组场景的告警均在约 1 分钟内自动解除，Prometheus 与 Alertmanager 告警数归零
+
+> 说明：Alertmanager 当前为本地空操作接收器，仅验证「Prometheus → Alertmanager」的告警流转与状态管理，未接入真实邮件/Webhook 通知。
+
 ## 相对参考仓库的修改点
 
 结构参考 [durrello/prometheus-grafana-docker](https://github.com/durrello/prometheus-grafana-docker)（MIT License），本项目为学习目的的复刻与改造，主要改动：
 
 1. **修正 Node Exporter 宿主机挂载**：原仓库未挂载 `/`、`/proc`、`/sys`，磁盘等宿主机指标采集不完整；已补齐挂载并增加 `--path.rootfs` 参数（注意：Windows Docker Desktop 下采集到的是 Docker 虚拟机指标，Linux 服务器上才是真实宿主机数据）
 2. **修正 NginxDown 告警表达式**：实测发现只停 Nginx 进程时 `up` 仍为 1（exporter 存活），原逻辑无法发现业务故障；改为基于 `nginx_up` 判断业务可用性
-3. **新增 Grafana 数据源自动 provisioning**：启动即用，免手工配置
-4. **新增 Nginx 业务告警组**（NginxDown / NginxHighActiveConnections），把"目标失联"翻译成业务语言
-5. **开启 `--web.enable-lifecycle`**：修改规则文件后可热重载，不用重启容器
-6. **Nginx 宿主机端口可配置**（`NGINX_PORT`，默认 8080），避免与宿主机上已有服务冲突
-7. **告警注释中文化**、`for` 时长按实验场景调优，并标注了生产环境应如何取值
+3. **新增指标缺失盲区告警**：`NginxMetricsMissing`（`absent(nginx_up)`），覆盖 exporter 进程挂掉、指标序列整体消失而 `== 0` 类规则无法触发的情况（已实测触发）
+4. **新增 Grafana 全自动 provisioning**：数据源自动注册（显式 uid）+ 自定义 8 面板 Dashboard 自动加载，clone 后 `docker compose up -d` 即出图，无需手工导入
+5. **新增 Nginx 业务告警组**（NginxDown / NginxHighActiveConnections），把"目标失联"翻译成业务语言
+6. **开启 `--web.enable-lifecycle`**：修改规则文件后可热重载，不用重启容器
+7. **Nginx 宿主机端口可配置**（`NGINX_PORT`，默认 8080），避免与宿主机上已有服务冲突
+8. **告警注释中文化**、`for` 时长按实验场景调优，并标注了生产环境应如何取值
 
 ## 常见问题
 
-- **端口冲突**：确认宿主机 3000/8080/9090/9093/9100/9113 未被占用，或修改 compose 端口映射
+- **端口冲突**：确认宿主机 3000/8080/9090/9093/9100/9113 未被占用，或修改 compose 端口映射（Nginx 端口可用 `.env` 的 `NGINX_PORT`）
 - **磁盘指标看不到真实数据**：Docker Desktop（Windows/macOS）下 node-exporter 采集的是虚拟机指标，属预期现象；部署到 Linux 云主机即为真实数据
 - **告警一直 inactive**：阈值未达到属正常；想快速看到效果可临时调低阈值、缩短 `for` 时长后热重载
+- **Grafana 启动后不断重启（Datasource provisioning error）**：旧版本 grafana-data 卷中残留的自动 uid 数据源与新的 `uid: prometheus` 冲突；执行 `docker compose down -v` 清空演示数据卷后重新 `up -d` 即可（会丢失历史指标，实验环境无影响）
+- **磁盘面板在 Docker Desktop 下显示多个挂载点**：VM 内根文件系统挂载点与 Linux 服务器不同（如 `/mnt`），面板已按文件系统类型过滤展示全部真实分区；在真实服务器上即显示 `/` 等标准挂载点
+- **`LowDiskSpace` 告警在 Docker Desktop 下不触发**：规则限定 `mountpoint="/"`（生产语义），VM 内无该挂载点；如需在实验环境演示磁盘告警，可将 `mountpoint` 改为 `/mnt` 后热重载
+
+## 开源来源与许可证
+
+本项目结构参考 [durrello/prometheus-grafana-docker](https://github.com/durrello/prometheus-grafana-docker)（MIT License，Copyright (c) 2026 Durrell Gemuh）复刻并修改，原作者版权声明与许可证全文保留于 [LICENSE](LICENSE)，本项目的修改部分以独立声明标注，同样以 MIT 协议分发。组件本身（Prometheus、Grafana、Alertmanager、Node Exporter、Nginx）为各自官方开源镜像，非本人开发。
 
 ## 简历写法参考
 
